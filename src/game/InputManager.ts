@@ -14,11 +14,15 @@ export class InputManager {
   onTargetChanged?: (col: number, row: number) => void;
   readonly cursorView: Container;
 
+  onPointerLockLost?: () => void; // fired when user presses Escape to exit pointer lock
+
   private isLMBDown = false;
+  private isShiftHeld = false;
   private mouseX: number;
   private mouseY: number;
   private prevButtons = 0;
   private locked = false;
+  private disabled = false;
 
   constructor(
     private app: Application,
@@ -36,12 +40,42 @@ export class InputManager {
   tick(): void {
     if (!this.isLMBDown) return;
     const { col, row } = this.toWorld(this.mouseX, this.mouseY);
-    this.player.setTarget(col, row);
-    this.onTargetChanged?.(col, row);
+
+    if (this.isShiftHeld) {
+      // SHIFT+LMB: fire basic attack toward cursor (cooldown-gated)
+      this.abilities.fire(SLOT_LMB, col, row);
+    } else {
+      // LMB only: move
+      this.player.setTarget(col, row);
+      this.onTargetChanged?.(col, row);
+    }
+  }
+
+  // Called by Game when an overlay (level-up, pause) opens.
+  pause(): void {
+    this.disabled = true;
+    this.isLMBDown = false;
+    this.prevButtons = 0;
+    this.app.canvas.style.cursor = 'default';
+    this.cursorView.visible = false;
+    if (document.pointerLockElement === this.app.canvas) {
+      document.exitPointerLock();
+    }
+  }
+
+  resume(): void {
+    this.disabled = false;
+    this.app.canvas.style.cursor = 'none';
+    this.cursorView.visible = true;
+  }
+
+  get cursorWorldPos(): { col: number; row: number } {
+    return this.toWorld(this.mouseX, this.mouseY);
   }
 
   private buildCursor(): Container {
     const c = new Container();
+    c.eventMode = 'none'; // never intercept pointer events
     const g = new Graphics();
     const outer = 10, gap = 3;
     g.moveTo(gap, 0).lineTo(outer, 0).stroke({ color: 0xffffff, width: 1.5 });
@@ -66,16 +100,13 @@ export class InputManager {
     return screenToWorld(screenX - this.worldContainer.x, screenY - this.worldContainer.y);
   }
 
-  // Diffs the current buttons bitmask against the previous one to detect presses
-  // and releases regardless of which event delivered the bitmask.
   private syncButtons(buttons: number): void {
     const newlyPressed = buttons & ~this.prevButtons;
     const released    = this.prevButtons & ~buttons;
 
     if (newlyPressed & 1) {
       this.isLMBDown = true;
-      const { col, row } = this.toWorld(this.mouseX, this.mouseY);
-      this.abilities.fire(SLOT_LMB, col, row);
+      // Attack is handled in tick() when shift is held — no single-shot fire here.
     }
     if (newlyPressed & 2) {
       const { col, row } = this.toWorld(this.mouseX, this.mouseY);
@@ -89,15 +120,10 @@ export class InputManager {
   }
 
   private bindPointer(): void {
-    // Hide the OS cursor — we render our own so it remains visible and
-    // correctly positioned whether or not pointer lock is active.
     this.app.canvas.style.cursor = 'none';
 
     window.addEventListener('mousemove', (e: MouseEvent) => {
       if (this.locked) {
-        // Pointer lock: OS cursor is frozen, use movement deltas to track position.
-        // Scale by the same ratio used in clientToScreen so the cursor speed
-        // matches across any DPR or CSS-scaling setups.
         const rect = this.app.canvas.getBoundingClientRect();
         const sx = this.app.screen.width  / rect.width;
         const sy = this.app.screen.height / rect.height;
@@ -109,13 +135,11 @@ export class InputManager {
         this.mouseY = pos.y;
       }
       this.cursorView.position.set(this.mouseX, this.mouseY);
-      this.syncButtons(e.buttons);
+      if (!this.disabled) this.syncButtons(e.buttons);
     });
 
     window.addEventListener('mousedown', (e: MouseEvent) => {
-      // First click acquires pointer lock. Once locked, the browser delivers
-      // mousedown for every button independently — bypassing Windows' drag-cancel
-      // that swallows RMB mousedown while LMB is held.
+      if (this.disabled) return;
       if (!this.locked) {
         this.app.canvas.requestPointerLock();
       }
@@ -123,16 +147,21 @@ export class InputManager {
     });
 
     window.addEventListener('mouseup', (e: MouseEvent) => {
-      this.syncButtons(e.buttons);
+      if (!this.disabled) this.syncButtons(e.buttons);
     });
 
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.app.canvas;
       if (!this.locked) {
-        // Reset bitmask so the next absolute-position mousemove doesn't
-        // produce false "newly pressed" deltas.
         this.prevButtons = 0;
         this.isLMBDown = false;
+        if (!this.disabled) {
+          // User pressed Escape to exit pointer lock — treat as pause request.
+          this.disabled = true;
+          this.app.canvas.style.cursor = 'default';
+          this.cursorView.visible = false;
+          this.onPointerLockLost?.();
+        }
       }
     });
 
@@ -141,12 +170,19 @@ export class InputManager {
 
   private bindKeyboard(): void {
     document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Shift') { this.isShiftHeld = true; return; }
+      if (this.disabled) return;
       if (e.repeat) return;
       const slot = KEY_MAP[e.key.toLowerCase()];
       if (slot !== undefined) {
         e.preventDefault();
-        this.abilities.fire(slot);
+        const { col, row } = this.cursorWorldPos;
+        this.abilities.fire(slot, col, row);
       }
+    });
+
+    document.addEventListener('keyup', (e: KeyboardEvent) => {
+      if (e.key === 'Shift') this.isShiftHeld = false;
     });
   }
 }

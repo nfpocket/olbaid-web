@@ -192,7 +192,7 @@ export class Game {
 
   private handleDeath(): void {
     this.gameOver = true;
-    this.hud.showDeath();
+    this.pauseMenu.showDeath(this.stats, this.runTimer.elapsedMs);
   }
 
   private followPlayer(): void {

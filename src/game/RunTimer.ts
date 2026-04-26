@@ -22,6 +22,10 @@ export class RunTimer {
     return this.expired;
   }
 
+  get elapsedMs(): number {
+    return (RUN_DURATION_S - this.remaining) * 1000;
+  }
+
   format(): string {
     const total = Math.ceil(this.remaining);
     const m = Math.floor(total / 60);

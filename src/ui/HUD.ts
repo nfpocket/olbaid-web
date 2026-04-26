@@ -22,7 +22,6 @@ export class HUD {
   private hpLabel!: Text;
   private xpLabel!: Text;
   private timerText!: Text;
-  private deathOverlay!: Container;
   private victoryOverlay!: Container;
 
   constructor() {
@@ -30,7 +29,6 @@ export class HUD {
     this.buildAbilityBar();
     this.buildStatusBars();
     this.buildTimerText();
-    this.buildDeathOverlay();
     this.buildVictoryOverlay();
   }
 
@@ -128,20 +126,6 @@ export class HUD {
     this.timerText.anchor.set(0.5, 0);
   }
 
-  private buildDeathOverlay(): void {
-    this.deathOverlay = new Container();
-    this.deathOverlay.visible = false;
-    const bg = new Graphics().rect(0, 0, 400, 120).fill({ color: 0x000000, alpha: 0.8 });
-    this.deathOverlay.addChild(bg);
-    const t = new Text({
-      text: 'YOU DIED\nPress F5 to restart',
-      style: new TextStyle({ fill: 0xff3333, fontSize: 28, fontFamily: 'monospace', fontWeight: 'bold', align: 'center' }),
-    });
-    t.anchor.set(0.5);
-    t.position.set(200, 60);
-    this.deathOverlay.addChild(t);
-  }
-
   private buildVictoryOverlay(): void {
     this.victoryOverlay = new Container();
     this.victoryOverlay.visible = false;
@@ -154,10 +138,6 @@ export class HUD {
     t.anchor.set(0.5);
     t.position.set(200, 60);
     this.victoryOverlay.addChild(t);
-  }
-
-  showDeath(): void {
-    this.deathOverlay.visible = true;
   }
 
   showVictory(): void {
@@ -216,9 +196,6 @@ export class HUD {
 
     this.timerText.position.set(screenW / 2, 16);
     if (!this.timerText.parent) this.view.parent?.addChild(this.timerText);
-
-    this.deathOverlay.position.set((screenW - 400) / 2, (screenH - 120) / 2);
-    if (!this.deathOverlay.parent) this.view.parent?.addChild(this.deathOverlay);
 
     this.victoryOverlay.position.set((screenW - 400) / 2, (screenH - 120) / 2);
     if (!this.victoryOverlay.parent) this.view.parent?.addChild(this.victoryOverlay);

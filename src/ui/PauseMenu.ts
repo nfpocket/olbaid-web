@@ -35,6 +35,7 @@ export class PauseMenu {
   private abilityContent: Container | null = null;
   private scrollThumb: Graphics | null = null;
   private wheelHandler: ((e: WheelEvent) => void) | null = null;
+  private deathKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(private app: Application, private onRestart?: () => void) {
     this.view = new Container();
@@ -196,6 +197,128 @@ export class PauseMenu {
     hit.on('pointermove', (e) => { if (dragging) apply(e); });
     hit.on('pointerup',        () => { dragging = false; });
     hit.on('pointerupoutside', () => { dragging = false; });
+  }
+
+  showDeath(stats: PlayerStats, elapsedMs: number): void {
+    this.scrollY = 0;
+    this.view.removeChildren();
+    this.abilityContent = null;
+    this.scrollThumb = null;
+
+    this.view.addChild(
+      new Graphics()
+        .rect(0, 0, this.app.screen.width, this.app.screen.height)
+        .fill({ color: 0x000000, alpha: 0.85 }),
+    );
+
+    const px = (this.app.screen.width - PANEL_W) / 2;
+    const py = (this.app.screen.height - PANEL_H) / 2;
+    const panel = new Container();
+    panel.position.set(px, py);
+    this.view.addChild(panel);
+
+    panel.addChild(
+      new Graphics()
+        .roundRect(0, 0, PANEL_W, PANEL_H, 10)
+        .fill({ color: 0x0d0d1f })
+        .stroke({ color: 0xaa2222, width: 2 }),
+    );
+
+    const title = new Text({
+      text: '— YOU DIED —',
+      style: new TextStyle({ fill: 0xff3333, fontSize: 20, fontFamily: 'monospace', fontWeight: 'bold' }),
+    });
+    title.anchor.set(0.5, 0);
+    title.position.set(PANEL_W / 2, PAD);
+    panel.addChild(title);
+
+    panel.addChild(
+      new Graphics()
+        .moveTo(PAD, HEADER_H - 4).lineTo(PANEL_W - PAD, HEADER_H - 4)
+        .stroke({ color: 0x333366, width: 1 }),
+    );
+    panel.addChild(
+      new Graphics()
+        .moveTo(PANEL_W / 2, HEADER_H).lineTo(PANEL_W / 2, PANEL_H - FOOTER_H)
+        .stroke({ color: 0x333366, width: 1 }),
+    );
+
+    this.buildStats(panel, stats);
+    this.buildRunSummary(panel, stats, elapsedMs);
+
+    // Restart button — centered in footer
+    const btnW = 180, btnH = 28;
+    const btnX = (PANEL_W - btnW) / 2;
+    const btnY = PANEL_H - FOOTER_H / 2;
+    const btnBg = new Graphics()
+      .roundRect(btnX, btnY - btnH / 2, btnW, btnH, 5)
+      .fill({ color: 0x1a1a00 })
+      .stroke({ color: 0xaa8800, width: 1 });
+    btnBg.eventMode = 'static';
+    btnBg.cursor = 'pointer';
+    btnBg.on('pointerover', () => { btnBg.tint = 0xffdd55; });
+    btnBg.on('pointerout',  () => { btnBg.tint = 0xffffff; });
+    btnBg.on('pointerdown', () => this.triggerRestart());
+    panel.addChild(btnBg);
+
+    const btnLabel = new Text({
+      text: '↺  PLAY AGAIN  (R)',
+      style: new TextStyle({ fill: 0xffcc00, fontSize: 12, fontFamily: 'monospace', fontWeight: 'bold' }),
+    });
+    btnLabel.anchor.set(0.5, 0.5);
+    btnLabel.position.set(PANEL_W / 2, btnY);
+    btnLabel.eventMode = 'none';
+    panel.addChild(btnLabel);
+
+    this.view.visible = true;
+
+    this.deathKeyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') this.triggerRestart();
+    };
+    document.addEventListener('keydown', this.deathKeyHandler);
+  }
+
+  private buildRunSummary(panel: Container, s: PlayerStats, elapsedMs: number): void {
+    let y = HEADER_H + 4;
+    const x = PANEL_W / 2 + PAD;
+
+    const addLabel = (text: string) => {
+      const t = new Text({ text, style: HEAD });
+      t.position.set(x, y);
+      panel.addChild(t);
+      y += 22;
+    };
+
+    const addRow = (label: string, value: string) => {
+      const lbl = new Text({ text: label, style: BODY });
+      lbl.position.set(x, y);
+      panel.addChild(lbl);
+      const val = new Text({ text: value, style: new TextStyle({ fill: 0xffffff, fontSize: 12, fontFamily: 'monospace' }) });
+      val.position.set(x + COL_W - 4, y);
+      val.anchor.set(1, 0);
+      panel.addChild(val);
+      y += 19;
+    };
+
+    const secs = Math.floor(elapsedMs / 1000);
+    const mm = Math.floor(secs / 60);
+    const ss = secs % 60;
+
+    addLabel('RUN SUMMARY');
+    y += 2;
+    addRow('Time Survived', `${mm}:${ss.toString().padStart(2, '0')}`);
+    addRow('Level Reached', `${s.level}`);
+    addRow('Total XP',      `${s.xp}`);
+    addRow('Final HP',      `${Math.ceil(s.hp)} / ${s.maxHp}`);
+  }
+
+  private triggerRestart(): void {
+    if (this.deathKeyHandler) {
+      document.removeEventListener('keydown', this.deathKeyHandler);
+      this.deathKeyHandler = null;
+    }
+    if (this.onRestart) this.onRestart();
+    else window.location.reload();
   }
 
   hide(): void {

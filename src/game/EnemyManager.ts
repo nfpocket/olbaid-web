@@ -45,8 +45,10 @@ export class EnemyManager {
   }
 
   private screenEdgeSpawn(): { wx: number; wy: number } {
-    const hw = this.screenW / 2 + TILE_W;
-    const hh = this.screenH / 2 + TILE_H;
+    // Random extra buffer so fast-moving players never see enemies pop in at the edge
+    const extra = TILE_H * (5 + Math.random() * 10);
+    const hw = this.screenW / 2 + TILE_W + extra;
+    const hh = this.screenH / 2 + TILE_H + extra;
     let ox: number, oy: number;
     if (Math.random() < 0.5) {
       ox = (Math.random() * 2 - 1) * hw;
